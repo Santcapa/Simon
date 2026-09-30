@@ -1,0 +1,9 @@
+aws_region      = "us-east-1"
+aws_profile     = "default"
+environment     = "dev"
+app_name        = "simon-app"
+deployment_mode = "ecs"
+vpc_id          = "vpc-12345678"
+subnet_ids      = ["subnet-12345678", "subnet-87654321"]
+instance_type   = "t3.micro"
+desired_count   = 1
