@@ -60,169 +60,46 @@ jobs:
           exit-code: 1
 
   # ------------------------------------------------------------
-  # 2. PLAN DEV
+  # 2. DEV
   # ------------------------------------------------------------
   plan-dev:
-    name: Terraform Plan — DEV
-    runs-on: ubuntu-latest
     needs: validate-and-scan
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment: dev
+      action: plan
+      aws_role_arn: ${{ vars.AWS_DEV_ROLE_ARN }}
+      aws_region: ${{ vars.AWS_DEV_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Configure AWS Credentials (DEV)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_DEV_REGION }}
-
-      - name: Terraform init (DEV)
-        working-directory: ${{ env.TF_ROOT }}/dev
-        run: terraform init -input=false
-
-      - name: Terraform plan (DEV)
-        working-directory: ${{ env.TF_ROOT }}/dev
-        run: |
-          terraform plan -var-file="terraform.tfvars" -out=tfplan
-
-      - name: Create human-readable plan
-        working-directory: ${{ env.TF_ROOT }}/dev
-        run: terraform show -no-color tfplan > terraform-plan.txt
-
-      - name: Upload plan artifact (DEV)
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-dev
-          path: |
-            ${{ env.TF_ROOT }}/dev/tfplan
-            ${{ env.TF_ROOT }}/dev/terraform-plan.txt
-
-  # ------------------------------------------------------------
-  # 3. APPLY DEV
-  # ------------------------------------------------------------
   apply-dev:
-    name: Apply — DEV (manual approval)
-    runs-on: ubuntu-latest
     needs: plan-dev
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: dev
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Configure AWS Credentials (DEV)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_DEV_REGION }}
-
-      - name: Download plan artifact (DEV)
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-plan-dev
-          path: ${{ env.TF_ROOT }}/dev
-
-      - name: Show terraform plan to logs (sanity)
-        working-directory: ${{ env.TF_ROOT }}/dev
-        run: |
-          echo "---- Terraform plan (DEV) ----"
-          sed -n '1,200p' terraform-plan.txt || true
-          echo "---- End (truncated) ----"
-
-      - name: Terraform apply (DEV)
-        working-directory: ${{ env.TF_ROOT }}/dev
-        run: terraform apply -auto-approve tfplan
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment: dev
+      action: apply
+      aws_role_arn: ${{ vars.AWS_DEV_ROLE_ARN }}
+      aws_region: ${{ vars.AWS_DEV_REGION }}
 
   # ------------------------------------------------------------
-  # 4. PLAN PROD
+  # 3. PROD
   # ------------------------------------------------------------
   plan-prod:
-    name: Terraform Plan — PROD
-    runs-on: ubuntu-latest
     needs: apply-dev
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment: prod
+      action: plan
+      aws_role_arn: ${{ vars.AWS_PROD_ROLE_ARN }}
+      aws_region: ${{ vars.AWS_PROD_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Configure AWS Credentials (PROD)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_PROD_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_PROD_REGION }}
-
-      - name: Terraform init (PROD)
-        working-directory: ${{ env.TF_ROOT }}/prod
-        run: terraform init -input=false
-
-      - name: Terraform plan (PROD)
-        working-directory: ${{ env.TF_ROOT }}/prod
-        run: |
-          terraform plan -var-file="terraform.tfvars" -out=tfplan
-
-      - name: Create human-readable plan (PROD)
-        working-directory: ${{ env.TF_ROOT }}/prod
-        run: terraform show -no-color tfplan > terraform-plan.txt
-
-      - name: Upload plan artifact (PROD)
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-prod
-          path: |
-            ${{ env.TF_ROOT }}/prod/tfplan
-            ${{ env.TF_ROOT }}/prod/terraform-plan.txt
-
-  # ------------------------------------------------------------
-  # 5. APPLY PROD
-  # ------------------------------------------------------------
   apply-prod:
-    name: Apply — PROD (manual approval)
-    runs-on: ubuntu-latest
     needs: plan-prod
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: production
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Configure AWS Credentials (PROD)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_PROD_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_PROD_REGION }}
-
-      - name: Download plan artifact (PROD)
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-plan-prod
-          path: ${{ env.TF_ROOT }}/prod
-
-      - name: Show terraform plan to logs (sanity)
-        working-directory: ${{ env.TF_ROOT }}/prod
-        run: |
-          echo "---- Terraform plan (PROD) ----"
-          sed -n '1,200p' terraform-plan.txt || true
-          echo "---- End (truncated) ----"
-
-      - name: Terraform apply (PROD)
-        working-directory: ${{ env.TF_ROOT }}/prod
-        run: terraform apply -auto-approve tfplan
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment: prod
+      action: apply
+      aws_role_arn: ${{ vars.AWS_PROD_ROLE_ARN }}
+      aws_region: ${{ vars.AWS_PROD_REGION }}
